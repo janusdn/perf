@@ -115,6 +115,8 @@ var (
 	flagGeomean   = flag.Bool("geomean", false, "print the geometric mean of each file")
 	flagHTML      = flag.Bool("html", false, "print results as an HTML table")
 	flagSplit     = flag.String("split", "pkg,goos,goarch", "split benchmarks by `labels`")
+	flagUnits     = flag.String("units", "b,allocs,ns", "prints only the given units")
+	flagOnlyDiff  = flag.Bool("diff", false, "prints only if differences appears")
 )
 
 var deltaTestNames = map[string]benchstat.DeltaTest{
@@ -125,6 +127,28 @@ var deltaTestNames = map[string]benchstat.DeltaTest{
 	"t":      benchstat.TTest,
 	"t-test": benchstat.TTest,
 	"ttest":  benchstat.TTest,
+}
+
+var unitNames = map[string]string{
+	"b":      "B/op",
+	"ns":     "ns/op",
+	"allocs": "allocs/op",
+}
+
+func filterDiff(tables []*benchstat.Table) []*benchstat.Table {
+	for i := 0; i < len(tables); i++ {
+		for j := 0; j < len(tables[i].Rows); j++ {
+			if tables[i].Rows[j].Change == 0 {
+				tables[i].Rows = append(tables[i].Rows[:j], tables[i].Rows[j+1:]...)
+				j--
+			}
+		}
+		if len(tables[i].Rows) == 0 {
+			tables = append(tables[:i], tables[i+1:]...)
+			i--
+		}
+	}
+	return tables
 }
 
 func main() {
@@ -145,6 +169,17 @@ func main() {
 	if *flagSplit != "" {
 		c.SplitBy = strings.Split(*flagSplit, ",")
 	}
+
+	units := []string{}
+	if *flagUnits != "" {
+		unitSet := strings.Split(*flagUnits, ",")
+		for _, u := range unitSet {
+			if n, ok := unitNames[strings.ToLower(u)]; ok {
+				units = append(units, n)
+			}
+		}
+	}
+
 	for _, file := range flag.Args() {
 		data, err := ioutil.ReadFile(file)
 		if err != nil {
@@ -153,7 +188,14 @@ func main() {
 		c.AddConfig(file, data)
 	}
 
+	if len(units) > 0 {
+		c.Units = units
+	}
+
 	tables := c.Tables()
+	if *flagOnlyDiff {
+		tables = filterDiff(tables)
+	}
 
 	var buf bytes.Buffer
 	if *flagHTML {
