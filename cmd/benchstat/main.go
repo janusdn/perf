@@ -195,6 +195,10 @@ func main() {
 	tables := c.Tables()
 	if *flagOnlyDiff {
 		tables = filterDiff(tables)
+		if len(tables) == 0 && !*flagHTML {
+			os.Stdout.WriteString("No significant differences in benchmarks\n")
+			return
+		}
 	}
 
 	var buf bytes.Buffer
