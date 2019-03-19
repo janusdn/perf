@@ -4,7 +4,7 @@ Benchstat computes and compares statistics about benchmarks.
 
 Usage:
 
-    benchstat [-delta-test name] [-geomean] [-html] old.txt [new.txt] [more.txt ...]
+    benchstat [-delta-test name] [-geomean] [-output name] old.txt [new.txt] [more.txt ...]
 
 Each input file should contain the concatenated output of a number of runs
 of ``go test -bench.'' For each different benchmark listed in an input file,
@@ -31,7 +31,10 @@ If invoked on more than two input files, benchstat prints the per-benchmark
 statistics for all the files, showing one column of statistics for each
 file, with no column for percent change or statistical significance.
 
-The -html option causes benchstat to print the results as an HTML table.
+The -output option causes benchstat to print the results as an either text,
+HTML, or json table.
+
+The -raw option causes benchstat to print results as unscaled values.
 
 ## Example
 

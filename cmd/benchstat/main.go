@@ -6,7 +6,7 @@
 //
 // Usage:
 //
-//	benchstat [-delta-test name] [-geomean] [-html] old.txt [new.txt] [more.txt ...]
+//	benchstat [-delta-test name] [-geomean] [-output name] old.txt [new.txt] [more.txt ...]
 //
 // Each input file should contain the concatenated output of a number
 // of runs of ``go test -bench.'' For each different benchmark listed in an input file,
@@ -35,7 +35,10 @@
 // statistics for all the files, showing one column of statistics for each file,
 // with no column for percent change or statistical significance.
 //
-// The -html option causes benchstat to print the results as an HTML table.
+// The -output option causes benchstat to print the results as an either text,
+// HTML, or json table.
+//
+// The -raw option causes benchstat to print results as unscaled values.
 //
 // Example
 //
@@ -102,6 +105,12 @@ import (
 	"golang.org/x/perf/benchstat"
 )
 
+const (
+  _text = "text"
+  _html = "html"
+  _json = "json"
+)
+
 func usage() {
 	fmt.Fprintf(os.Stderr, "usage: benchstat [options] old.txt [new.txt] [more.txt ...]\n")
 	fmt.Fprintf(os.Stderr, "options:\n")
@@ -113,10 +122,11 @@ var (
 	flagDeltaTest = flag.String("delta-test", "utest", "significance `test` to apply to delta: utest, ttest, or none")
 	flagAlpha     = flag.Float64("alpha", 0.05, "consider change significant if p < `α`")
 	flagGeomean   = flag.Bool("geomean", false, "print the geometric mean of each file")
-	flagHTML      = flag.Bool("html", false, "print results as an HTML table")
 	flagSplit     = flag.String("split", "pkg,goos,goarch", "split benchmarks by `labels`")
 	flagUnits     = flag.String("units", "b,allocs,ns", "prints only the given units")
 	flagOnlyDiff  = flag.Bool("diff", false, "prints only if differences appears")
+	flagRawValues  = flag.Bool("raw", false, "the raw unscaled values are printed")
+	flagOutput = flag.String("output", "text", "output format: text (default), html, or json")
 )
 
 var deltaTestNames = map[string]benchstat.DeltaTest{
@@ -133,6 +143,12 @@ var unitNames = map[string]string{
 	"b":      "B/op",
 	"ns":     "ns/op",
 	"allocs": "allocs/op",
+}
+
+var outputFormatNames = map[string]string{
+	"text": _text,
+	"html": _html,
+	"json": _json,
 }
 
 func filterDiff(tables []*benchstat.Table) []*benchstat.Table {
@@ -160,6 +176,8 @@ func main() {
 	if flag.NArg() < 1 || deltaTest == nil {
 		flag.Usage()
 	}
+
+	outputFormat := outputFormatNames[strings.ToLower(*flagOutput)]
 
 	c := &benchstat.Collection{
 		Alpha:      *flagAlpha,
@@ -193,19 +211,31 @@ func main() {
 	}
 
 	tables := c.Tables()
+
+	if *flagRawValues {
+		for _, table := range tables {
+			for _, row := range table.Rows {
+				row.Scaler = NewNoopScaler(row.Metrics[0].Unit)
+			}
+		}
+	}
+
 	if *flagOnlyDiff {
 		tables = filterDiff(tables)
-		if len(tables) == 0 && !*flagHTML {
+		if len(tables) == 0 && outputFormat == _text {
 			os.Stdout.WriteString("No significant differences in benchmarks\n")
 			return
 		}
 	}
 
 	var buf bytes.Buffer
-	if *flagHTML {
+	switch outputFormat {
+	case _html:
 		buf.WriteString(htmlStyle)
 		benchstat.FormatHTML(&buf, tables)
-	} else {
+	case _json:
+		FormatJson(&buf, tables)
+	case _text:
 		benchstat.FormatText(&buf, tables)
 	}
 	os.Stdout.Write(buf.Bytes())
